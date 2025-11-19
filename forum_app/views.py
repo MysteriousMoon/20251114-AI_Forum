@@ -31,7 +31,7 @@ def trigger_ai_reply_task(thread_id):
             for post in recent_posts:
                 conversation_history += f"{post.author.username}: {post.content}\n"
 
-            num_to_reply = random.randint(1, 3)
+            num_to_reply = random.randint(3, 5)
             selected_agents = random.sample(all_agents, min(num_to_reply, len(all_agents)))
 
             print(f"🤖 [AI] 读取了 {len(recent_posts)+1} 条历史消息，正在思考...")
@@ -85,16 +85,18 @@ def api_get_single_thread(request, thread_id):
 def api_create_thread(request):
     data = request.data
     username = data.get('username')
+    title = data.get('title')
     content = data.get('content')
 
     user, _ = HumanUser.objects.get_or_create(username=username)
     if not user.email: user.email = f"{username}@temp.com"
     user.save()
     
-    plain_text = strip_html_tags(content)
-    title = plain_text[:50] if len(plain_text) > 50 else plain_text
-    if not title:
-        title = "无标题"
+    if not title or not title.strip():
+        plain_text = strip_html_tags(content)
+        title = plain_text[:50] if len(plain_text) > 50 else plain_text
+        if not title:
+            title = "无标题"
     
     new_thread = Thread.objects.create(
         title=title,

@@ -11,6 +11,7 @@ import 'react-quill-new/dist/quill.snow.css';
 export default function CreateThread() {
   const router = useRouter();
   const [username, setUsername] = useState('');
+  const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -27,7 +28,7 @@ export default function CreateThread() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const cleanContent = content.replace(/<(.|\n)*?>/g, '').trim(); 
-    if (!username.trim() || !cleanContent) {
+    if (!username.trim() || !title.trim() || !cleanContent) {
       alert("请填写完整内容");
       return;
     }
@@ -37,7 +38,7 @@ export default function CreateThread() {
       const res = await fetch('http://127.0.0.1:8000/api/create/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, content }),
+        body: JSON.stringify({ username, title, content }),
       });
 
       if (res.ok) {
@@ -80,6 +81,20 @@ export default function CreateThread() {
               className="w-full md:w-1/3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-base focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 outline-none transition-all font-medium text-slate-800 dark:text-slate-200"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+              主题标题
+            </label>
+            <input
+              type="text"
+              placeholder="输入主题标题..."
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-base focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 outline-none transition-all font-medium text-slate-800 dark:text-slate-200"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
               required
             />
           </div>

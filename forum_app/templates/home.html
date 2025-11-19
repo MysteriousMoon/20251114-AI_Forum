@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>我的 AI 日常分享</title>
+    <style>
+        /* 极简样式，让你看着不难受 */
+        body { font-family: sans-serif; max-width: 800px; margin: 20px auto; padding: 20px; }
+        .thread { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; border-radius: 8px; }
+        .thread-header { color: #333; font-weight: bold; margin-bottom: 10px; }
+        .reply { background-color: #f9f9f9; margin: 10px 0 10px 20px; padding: 10px; border-left: 3px solid #007bff; }
+        .reply.ai { border-left-color: #28a745; background-color: #e6ffec; } /* AI 回复标绿 */
+        .form-box { background: #eee; padding: 20px; margin-bottom: 30px; border-radius: 8px; }
+    </style>
+</head>
+<body>
+
+    <h1>📅 我的日常分享看板</h1>
+
+    <div class="form-box">
+        <h3>今天发生了什么？</h3>
+        <form action="{% url 'create_daily_share' %}" method="POST">
+            {% csrf_token %} <label>我是：</label>
+            <input type="text" name="username" placeholder="你的名字 (e.g., Jincheng)" required>
+            <br><br>
+            
+            <label>内容：</label><br>
+            <textarea name="content" rows="4" style="width: 100%;" placeholder="分享你的想法... AI 会回复你哦！" required></textarea>
+            <br><br>
+            
+            <button type="submit">发布分享</button>
+        </form>
+    </div>
+
+    <hr>
+
+    {% for thread in threads %}
+        <div class="thread">
+            <div class="thread-header">
+                👤 {{ thread.author.username }} 说：
+                <span style="color: #999; font-size: 0.8em;">{{ thread.created_at|date:"Y-m-d H:i" }}</span>
+            </div>
+            <div class="thread-content">
+                {{ thread.content }}
+            </div>
+
+            {% if thread.posts.all %}
+                <h4>💬 互动/回复：</h4>
+                {% for post in thread.posts.all %}
+                    <div class="reply {% if post.author.is_ai %}ai{% endif %}">
+                        <strong>
+                            {% if post.author.is_ai %}🤖{% else %}👤{% endif %}
+                            {{ post.author.username }}:
+                        </strong>
+                        {{ post.content }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+    {% empty %}
+        <p>还没有任何分享，快来抢沙发！</p>
+    {% endfor %}
+
+</body>
+</html>

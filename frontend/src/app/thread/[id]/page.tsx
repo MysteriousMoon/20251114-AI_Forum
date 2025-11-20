@@ -2,6 +2,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Send, Bot, User, Loader2, MessageSquarePlus, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import dynamic from 'next/dynamic';
 const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
@@ -182,10 +184,18 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
                   </span>
                 </div>
                 
-                <div 
+                {post.is_ai ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 prose-p:leading-relaxed prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-pre:bg-slate-800 dark:prose-pre:bg-slate-950 prose-pre:text-slate-100 prose-code:text-emerald-600 dark:prose-code:text-emerald-400 prose-code:before:content-none prose-code:after:content-none">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {post.content.replace(/<[^>]+>/g, '')}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <div 
                     className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 prose-p:leading-relaxed prose-a:text-blue-600 dark:prose-a:text-blue-400"
                     dangerouslySetInnerHTML={{ __html: post.content }}
-                />
+                  />
+                )}
               </div>
             ))}
             

@@ -1,21 +1,45 @@
 "use client";
-import { useState, FormEvent, useMemo } from 'react';
-import { useRouter } from 'next/navigation'; // 使用 Next.js 路由
-import { ArrowLeft, Send, Loader2, User, Type } from 'lucide-react';
+import { useState, FormEvent, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowLeft, Send, Loader2, PenLine } from 'lucide-react';
 import dynamic from 'next/dynamic';
 
-// 动态引入 Quill，禁用 SSR
 const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
 import 'react-quill-new/dist/quill.snow.css';
 
+interface UserInfo {
+  id: number;
+  username: string;
+  email: string;
+}
+
 export default function CreateThread() {
   const router = useRouter();
-  const [username, setUsername] = useState('');
+  const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 配置 Quill 工具栏
+  useEffect(() => {
+    // 检查登录状态
+    const userStr = localStorage.getItem('user');
+    const token = localStorage.getItem('access_token');
+    
+    if (!userStr || !token) {
+      alert('请先登录');
+      router.push('/login');
+      return;
+    }
+    
+    try {
+      setCurrentUser(JSON.parse(userStr));
+    } catch (e) {
+      console.error('解析用户信息失败', e);
+      router.push('/login');
+    }
+  }, [router]);
+
   const modules = useMemo(() => ({
     toolbar: [
       ['bold', 'italic', 'underline', 'strike'],
@@ -29,29 +53,31 @@ export default function CreateThread() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     
-    // 简单的校验：移除 HTML 标签后检查是否为空
     const cleanContent = content.replace(/<(.|\n)*?>/g, '').trim(); 
 
-    if (!username.trim() || !title.trim() || !cleanContent) {
+    if (!title.trim() || !cleanContent) {
       alert("请填写完整内容");
       return;
     }
 
     setIsSubmitting(true);
     try {
+      const token = localStorage.getItem('access_token');
       const res = await fetch('http://127.0.0.1:8000/api/create/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ 
-            username, 
             title, 
-            content // 这里发送的是富文本 HTML
+            content
         }),
       });
 
       if (res.ok) {
-        router.push('/'); 
-        router.refresh();
+        const data = await res.json();
+        router.push(`/thread/${data.thread_id}`);
       } else {
         alert("发布失败");
       }
@@ -86,44 +112,43 @@ export default function CreateThread() {
           </div>
         </div>
 
+        {currentUser && (
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400">
+                <PenLine size={20} />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500 dark:text-slate-400">发帖身份</p>
+                <p className="font-semibold text-slate-900 dark:text-slate-100">{currentUser.username}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           
-          {/* 用户名输入 (保留样式1) */}
-          <div className="bg-white dark:bg-slate-900 p-1 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 transition-shadow focus-within:shadow-md focus-within:border-indigo-500/50">
-            <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                    <User size={18} />
-                </div>
-                <input
-                    type="text"
-                    placeholder="你的昵称 (例如: Jincheng)"
-                    className="block w-full pl-11 pr-4 py-3.5 bg-transparent border-none text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-0 rounded-lg font-medium transition-all outline-none"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                />
-            </div>
+          {/* 标题输入 */}
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 transition-shadow focus-within:shadow-md focus-within:border-indigo-500/50">
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
+              主题标题
+            </label>
+            <input
+                type="text"
+                placeholder="输入主题标题..."
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-base focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 outline-none transition-all font-medium text-slate-900 dark:text-slate-100"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+            />
           </div>
 
-          {/* 标题输入 (保留样式1) */}
-          <div className="bg-white dark:bg-slate-900 p-1 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 transition-shadow focus-within:shadow-md focus-within:border-indigo-500/50">
-             <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                    <Type size={18} />
-                </div>
-                <input
-                    type="text"
-                    placeholder="主题标题"
-                    className="block w-full pl-11 pr-4 py-3.5 bg-transparent border-none text-lg font-semibold text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:ring-0 rounded-lg transition-all outline-none"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    required
-                />
-            </div>
-          </div>
-
-          {/* Quill 编辑器 (功能核心，但魔改了样式以匹配样式1) */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-shadow focus-within:shadow-md focus-within:border-indigo-500/50">
+          {/* Quill 编辑器 */}
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
+            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-4">
+              详细内容
+            </label>
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
             {/* Tailwind 样式覆写说明：
                 1. ql-toolbar: 模拟样式1的顶部灰色工具栏背景，去掉默认边框，只保留下划线。
                 2. ql-container: 去掉默认边框，调整字体。
@@ -151,9 +176,10 @@ export default function CreateThread() {
                 placeholder="在这里尽情书写你的想法..."
               />
             </div>
+            </div>
           </div>
 
-          {/* 底部按钮 (保留样式1) */}
+          {/* 底部按钮 */}
           <div className="flex items-center justify-end pt-2 gap-4">
             <a 
                 href="/"

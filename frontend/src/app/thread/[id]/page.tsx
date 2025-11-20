@@ -15,6 +15,7 @@ interface Post {
   content: string;
   created_at: string;
   author_name: string;
+  author_avatar?: string;
   is_ai: boolean;
 }
 
@@ -24,14 +25,22 @@ interface Thread {
   content: string;
   created_at: string;
   author_name: string;
+  author_avatar?: string;
   posts: Post[];
   ai_generating: boolean;
+}
+
+interface UserInfo {
+  id: number;
+  username: string;
+  email: string;
+  avatar?: string;
 }
 
 export default function ThreadDetail({ params }: { params: Promise<{ id: string }> }) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [thread, setThread] = useState<Thread | null>(null);
-  const [username, setUsername] = useState(''); 
+  const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showReplyForm, setShowReplyForm] = useState(false);
@@ -47,6 +56,16 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
 
   useEffect(() => {
     params.then(p => setThreadId(p.id));
+    
+    // 检查登录状态
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        setCurrentUser(JSON.parse(userStr));
+      } catch (e) {
+        console.error('解析用户信息失败', e);
+      }
+    }
   }, [params]);
 
   const fetchDetail = async () => {
@@ -78,22 +97,30 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
     e.preventDefault();
     const cleanContent = replyContent.replace(/<(.|\n)*?>/g, '').trim(); 
     
-    if (!username.trim() || !cleanContent || !threadId) {
-      alert("请输入名字和内容");
+    if (!currentUser) {
+      alert("请先登录");
+      return;
+    }
+    
+    if (!cleanContent || !threadId) {
+      alert("请输入内容");
       return;
     }
 
     setIsSending(true);
     try {
+      const token = localStorage.getItem('access_token');
       const res = await fetch(`http://127.0.0.1:8000/api/threads/${threadId}/reply/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, content: replyContent }),
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ content: replyContent }),
       });
 
       if (res.ok) {
         setReplyContent('');
-        setUsername('');
         setShowReplyForm(false);
         await fetchDetail();
         setTimeout(() => {
@@ -145,9 +172,13 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
           
           <div className="flex items-center gap-4 mb-8 pb-8 border-b border-slate-100 dark:border-slate-800">
             <div className="relative">
-                <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/20 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/50">
-                    <User size={24} />
-                </div>
+                {thread.author_avatar ? (
+                  <img src={thread.author_avatar} alt={thread.author_name} className="w-12 h-12 rounded-full object-cover border border-indigo-100 dark:border-indigo-800/50" />
+                ) : (
+                  <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/20 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/50">
+                      <User size={24} />
+                  </div>
+                )}
                 <div className="absolute -bottom-1 -right-1 bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded-full border-2 border-white dark:border-slate-900 font-bold">
                     楼主
                 </div>
@@ -196,15 +227,27 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
 
                 {/* 头部信息 */}
                 <div className="flex items-start gap-4 mb-5 relative z-10">
-                  <div className={`
-                    shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm border
-                    ${post.is_ai 
-                        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50 ring-2 ring-emerald-50 dark:ring-emerald-900/20' 
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
-                    }
-                  `}>
-                    {post.is_ai ? <Bot size={20} strokeWidth={2.5} /> : <User size={20} />}
-                  </div>
+                  {post.author_avatar ? (
+                    <img 
+                      src={post.author_avatar} 
+                      alt={post.author_name} 
+                      className={`shrink-0 w-10 h-10 rounded-full object-cover shadow-sm border ${
+                        post.is_ai 
+                          ? 'border-emerald-200 dark:border-emerald-800/50 ring-2 ring-emerald-50 dark:ring-emerald-900/20'
+                          : 'border-slate-200 dark:border-slate-700'
+                      }`}
+                    />
+                  ) : (
+                    <div className={`
+                      shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm border
+                      ${post.is_ai 
+                          ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50 ring-2 ring-emerald-50 dark:ring-emerald-900/20' 
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                      }
+                    `}>
+                      {post.is_ai ? <Bot size={20} strokeWidth={2.5} /> : <User size={20} />}
+                    </div>
+                  )}
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -311,20 +354,21 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 dark:bg-slate-950">
-          <form className="space-y-6">
-            <div className="space-y-2">
-                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                    <User size={14} /> 昵称
-                </label>
-                <input 
-                    type="text" 
-                    className="block w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:border-indigo-500 outline-none transition-all text-slate-800 dark:text-slate-200 placeholder:text-slate-400 shadow-sm"
-                    placeholder="如何称呼你？"
-                    value={username}
-                    onChange={e => setUsername(e.target.value)}
-                />
+          {currentUser && (
+            <div className="mb-6 p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <User size={20} />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">回复身份</p>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">{currentUser.username}</p>
+                </div>
+              </div>
             </div>
-
+          )}
+          
+          <form className="space-y-6">
             <div className="space-y-2 flex-1 flex flex-col">
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
                     <Bot size={14} /> 内容

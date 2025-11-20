@@ -15,8 +15,6 @@ def trigger_ai_reply_task(thread_id):
     def generate_replies():
         try:
             thread = Thread.objects.get(id=thread_id)
-            thread.ai_generating = True
-            thread.save()
             
             all_agents = list(AIAgent.objects.all())
             if not all_agents:
@@ -133,6 +131,10 @@ def api_reply_thread(request, thread_id):
         content=content,
         author=user.actor_ptr
     )
+
+    # 先设置标志，再启动后台任务
+    thread.ai_generating = True
+    thread.save()
 
     print("🤖 开始生成AI回复（后台异步）...")
     trigger_ai_reply_task(thread.id)

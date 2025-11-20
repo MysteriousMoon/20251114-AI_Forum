@@ -6,7 +6,7 @@ SECRET_KEY = 'django-insecure-kj#)n0(qh*_)w&r-i$=k@=m&i9s8)wy1_$z!57(0_mkk%2=90@
 
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -34,6 +34,7 @@ MIDDLEWARE = [
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 ROOT_URLCONF = 'ai_forum_project.urls'

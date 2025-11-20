@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Send, Bot, User, Loader2, MessageSquarePlus, X } from 'lucide-react';
+import { ArrowLeft, Send, Bot, User, Loader2, MessageSquarePlus, X, Sparkles, Clock, Copy, Check } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -9,6 +9,7 @@ import dynamic from 'next/dynamic';
 const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
 import 'react-quill-new/dist/quill.snow.css';
 
+// --- 类型定义 ---
 interface Post {
   id: number;
   content: string;
@@ -35,10 +36,11 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
   const [isSending, setIsSending] = useState(false);
   const [showReplyForm, setShowReplyForm] = useState(false);
 
+  // 工具栏配置
   const modules = useMemo(() => ({
     toolbar: [
-      ['bold', 'italic', 'underline', 'strike'],
-      ['link', 'code-block'],
+      ['bold', 'italic', 'code-block', 'link'],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
       ['clean']
     ],
   }), []);
@@ -65,19 +67,11 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
     fetchDetail();
   }, [threadId]);
   
-  // 智能轮询：只在 AI 生成时轮询
+  // 智能轮询
   useEffect(() => {
     if (!thread || !thread.ai_generating) return;
-    
-    console.log('🔄 AI 正在生成，开始轮询...');
-    const pollInterval = setInterval(() => {
-      fetchDetail();
-    }, 2000); // 每2秒检查一次
-    
-    return () => {
-      console.log('⏹️ 停止轮询');
-      clearInterval(pollInterval);
-    };
+    const pollInterval = setInterval(() => { fetchDetail(); }, 2000);
+    return () => clearInterval(pollInterval);
   }, [thread?.ai_generating, threadId]);
 
   const handleReply = async (e: React.FormEvent) => {
@@ -90,27 +84,21 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
     }
 
     setIsSending(true);
-    
     try {
       const res = await fetch(`http://127.0.0.1:8000/api/threads/${threadId}/reply/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          username: username, 
-          content: replyContent 
-        }),
+        body: JSON.stringify({ username, content: replyContent }),
       });
 
       if (res.ok) {
         setReplyContent('');
         setUsername('');
         setShowReplyForm(false);
-        
-        // 立即刷新一次
         await fetchDetail();
-        
         setTimeout(() => {
-          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+            const element = document.getElementById('posts-end');
+            element?.scrollIntoView({ behavior: 'smooth' });
         }, 100);
       } else {
         alert("回复失败");
@@ -123,164 +111,231 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
     }
   };
 
-  if (!thread) return <div className="p-20 text-center text-slate-400 flex justify-center"><Loader2 className="animate-spin" /></div>;
+  if (!thread) return <div className="min-h-screen flex items-center justify-center text-slate-400"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 font-sans pb-32">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans relative selection:bg-indigo-100 dark:selection:bg-indigo-900/50">
       
-      {/* 固定悬浮的返回按钮 */}
-      <Link href="/" className="fixed top-6 left-6 z-50 inline-flex items-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition font-medium bg-white dark:bg-slate-800 px-4 py-3 rounded-full border border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl">
-        <ArrowLeft size={18} className="mr-2" /> 返回首页
-      </Link>
+      {/* 顶部导航 */}
+      <div className="sticky top-0 z-30 bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-4 py-4">
+         <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <Link href="/" className="group flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 transition-colors">
+                <div className="p-2 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 group-hover:border-indigo-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-all shadow-sm">
+                    <ArrowLeft size={18} className="group-hover:-translate-x-0.5 transition-transform" />
+                </div>
+                <span className="font-medium hidden sm:inline">返回列表</span>
+            </Link>
+            <div className="text-xs font-medium px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 flex items-center gap-1.5">
+                <MessageSquarePlus size={14} />
+                {thread.posts.length} 条回复
+            </div>
+         </div>
+      </div>
 
-      <div className="max-w-4xl mx-auto p-4">
-        <div className="py-6"></div>
-
-        <div className="bg-white dark:bg-slate-800 p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 mb-10">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100 mb-6 leading-tight">
+      <div className="max-w-4xl mx-auto p-4 pb-32">
+        
+        {/* 主题帖 (楼主) */}
+        <div className="mt-6 bg-white dark:bg-slate-900 p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800 relative overflow-hidden group">
+          {/* 顶部装饰线 */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 opacity-80"></div>
+          
+          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 dark:text-slate-100 mb-6 leading-tight tracking-tight">
             {thread.title.replace(/<[^>]+>/g, '')}
           </h1>
-          <div className="flex items-center gap-3 mb-8 pb-8 border-b border-slate-100 dark:border-slate-700">
-            <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800">
-              <User size={24} />
+          
+          <div className="flex items-center gap-4 mb-8 pb-8 border-b border-slate-100 dark:border-slate-800">
+            <div className="relative">
+                <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/20 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/50">
+                    <User size={24} />
+                </div>
+                <div className="absolute -bottom-1 -right-1 bg-indigo-500 text-white text-[10px] px-1.5 py-0.5 rounded-full border-2 border-white dark:border-slate-900 font-bold">
+                    楼主
+                </div>
             </div>
             <div>
               <div className="font-bold text-lg text-slate-800 dark:text-slate-200">{thread.author_name}</div>
-              <div className="text-sm text-slate-400 dark:text-slate-500">{new Date(thread.created_at).toLocaleString()}</div>
+              <div className="text-sm text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                 <Clock size={13} />
+                 {new Date(thread.created_at).toLocaleString()}
+              </div>
             </div>
           </div>
           
           <div 
-            className="prose prose-slate dark:prose-invert prose-lg max-w-none text-slate-800 dark:text-slate-200 leading-relaxed"
+            className="prose prose-slate dark:prose-invert prose-lg max-w-none text-slate-700 dark:text-slate-300 leading-relaxed"
             dangerouslySetInnerHTML={{ __html: thread.content }}
           />
         </div>
 
-        <div className="mb-12">
-          <h3 className="font-bold text-slate-400 dark:text-slate-500 text-sm uppercase tracking-wider ml-2 mb-6 flex items-center gap-2">
-            <MessageSquarePlus size={16} />
-            {thread.posts.length} 条讨论
-          </h3>
-          
-          <div className="space-y-6">
+        {/* 回复列表 */}
+        <div className="mt-10 space-y-6">
+            <div className="flex items-center gap-4 px-2">
+                <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                    讨论区
+                </h3>
+                <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800"></div>
+            </div>
+
             {thread.posts.map((post) => (
-              <div key={post.id} className={`p-6 rounded-2xl border shadow-sm transition-all ${
-                post.is_ai 
-                  ? 'bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800 ml-8 md:ml-16' 
-                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 mr-8 md:mr-16'
-              }`}>
-                <div className="flex items-center gap-3 mb-3">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center shadow-sm border ${
-                    post.is_ai ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800' : 'bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-slate-400 border-gray-200 dark:border-slate-600'
-                  }`}>
-                    {post.is_ai ? <Bot size={18} /> : <User size={18} />}
+              <div key={post.id} className={`
+                relative rounded-2xl transition-all duration-300
+                ${post.is_ai 
+                  ? 'ml-2 md:ml-12 border border-emerald-100 dark:border-emerald-500/20 bg-gradient-to-br from-emerald-50/80 via-white to-emerald-50/30 dark:from-slate-900 dark:via-slate-900 dark:to-emerald-900/10 shadow-sm hover:shadow-md' 
+                  : 'mr-2 md:mr-12 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm'
+                }
+                p-6 md:p-8
+              `}>
+                
+                {/* AI 专属：背景光效 */}
+                {post.is_ai && (
+                    <>
+                        <div className="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 bg-emerald-400/10 dark:bg-emerald-500/10 blur-3xl rounded-full pointer-events-none opacity-70"></div>
+                        <div className="absolute left-0 top-6 bottom-6 w-1 bg-emerald-400/30 rounded-r-full"></div>
+                    </>
+                )}
+
+                {/* 头部信息 */}
+                <div className="flex items-start gap-4 mb-5 relative z-10">
+                  <div className={`
+                    shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm border
+                    ${post.is_ai 
+                        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/50 ring-2 ring-emerald-50 dark:ring-emerald-900/20' 
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                    }
+                  `}>
+                    {post.is_ai ? <Bot size={20} strokeWidth={2.5} /> : <User size={20} />}
                   </div>
-                  <span className={`font-bold ${post.is_ai ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                    {post.author_name}
-                    {post.is_ai && <span className="ml-2 text-[10px] bg-emerald-200 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700">AI</span>}
-                  </span>
-                  <span className="text-xs text-slate-400 dark:text-slate-500 ml-auto">
-                    {new Date(post.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                  </span>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`font-bold text-base truncate ${post.is_ai ? 'text-emerald-900 dark:text-emerald-200' : 'text-slate-900 dark:text-slate-200'}`}>
+                            {post.author_name}
+                        </span>
+                        
+                        {post.is_ai && (
+                            <span className="flex items-center gap-1 text-[10px] font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white px-2 py-0.5 rounded-full shadow-sm shadow-emerald-500/20">
+                                <Sparkles size={10} fill="currentColor" /> AI Assistant
+                            </span>
+                        )}
+                        
+                        <span className="text-xs text-slate-400 dark:text-slate-500 ml-auto font-medium tabular-nums">
+                            {new Date(post.created_at).toLocaleString()}
+                        </span>
+                    </div>
+                  </div>
                 </div>
                 
-                {post.is_ai ? (
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 prose-p:leading-relaxed prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-pre:bg-slate-800 dark:prose-pre:bg-slate-950 prose-pre:text-slate-100 prose-code:text-emerald-600 dark:prose-code:text-emerald-400 prose-code:before:content-none prose-code:after:content-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {post.content.replace(/<[^>]+>/g, '')}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <div 
-                    className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 prose-p:leading-relaxed prose-a:text-blue-600 dark:prose-a:text-blue-400"
-                    dangerouslySetInnerHTML={{ __html: post.content }}
-                  />
-                )}
+                {/* 内容区 */}
+                <div className="relative z-10 pl-0 md:pl-14">
+                    {post.is_ai ? (
+                    <div className="
+                        prose prose-slate dark:prose-invert max-w-none 
+                        prose-p:leading-relaxed prose-p:text-slate-700 dark:prose-p:text-slate-300
+                        prose-headings:text-emerald-950 dark:prose-headings:text-emerald-200 prose-headings:font-bold
+                        prose-a:text-emerald-600 dark:prose-a:text-emerald-400 prose-a:no-underline hover:prose-a:underline
+                        prose-strong:text-emerald-900 dark:prose-strong:text-emerald-300
+                        prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:text-emerald-700 dark:prose-code:text-emerald-300 prose-code:font-medium prose-code:before:content-[''] prose-code:after:content-['']
+                        prose-pre:bg-slate-900 dark:prose-pre:bg-black/40 prose-pre:border prose-pre:border-slate-800 dark:prose-pre:border-emerald-900/30 prose-pre:shadow-lg prose-pre:rounded-xl
+                        prose-ul:marker:text-emerald-400
+                    ">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {post.content.replace(/<[^>]+>/g, '')}
+                        </ReactMarkdown>
+                    </div>
+                    ) : (
+                    <div 
+                        className="prose prose-slate dark:prose-invert max-w-none text-slate-700 dark:text-slate-300"
+                        dangerouslySetInnerHTML={{ __html: post.content }}
+                    />
+                    )}
+                </div>
               </div>
             ))}
             
-            {/* AI正在生成回复 */}
+            {/* AI 生成中状态卡片 (Skeleton) */}
             {thread.ai_generating && (
-              <div className="p-6 rounded-2xl border shadow-sm transition-all bg-emerald-50/50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800 ml-8 md:ml-16">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center shadow-sm border bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
-                    <Bot size={18} />
-                  </div>
-                  <span className="font-bold text-emerald-700 dark:text-emerald-400">
-                    AI 助手
-                    <span className="ml-2 text-[10px] bg-emerald-200 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-700">AI</span>
-                  </span>
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 ml-auto flex items-center gap-1">
-                    <Loader2 size={14} className="animate-spin" />
-                    正在生成回复...
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 text-emerald-600/60 dark:text-emerald-400/60">
-                  <div className="flex gap-1">
-                    <span className="animate-bounce" style={{animationDelay: '0ms'}}>●</span>
-                    <span className="animate-bounce" style={{animationDelay: '150ms'}}>●</span>
-                    <span className="animate-bounce" style={{animationDelay: '300ms'}}>●</span>
-                  </div>
-                </div>
+              <div className="ml-2 md:ml-12 rounded-2xl border border-emerald-100/50 dark:border-emerald-900/30 bg-gradient-to-br from-emerald-50/40 via-white/50 to-transparent dark:bg-slate-900/50 p-6 md:p-8 animate-pulse">
+                 <div className="flex items-center gap-4 mb-5">
+                    <div className="w-10 h-10 rounded-full bg-emerald-100/50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-500">
+                        <Loader2 size={20} className="animate-spin" />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <div className="h-4 bg-emerald-100 dark:bg-emerald-900/30 rounded w-24"></div>
+                        <div className="h-3 bg-emerald-50 dark:bg-emerald-900/20 rounded w-16"></div>
+                    </div>
+                 </div>
+                 <div className="space-y-3 pl-14">
+                    <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-3/4"></div>
+                    <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-full"></div>
+                    <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-5/6"></div>
+                 </div>
               </div>
             )}
-          </div>
+            
+            <div id="posts-end" className="h-4"></div>
         </div>
       </div>
 
+      {/* 悬浮回复按钮 (FAB) */}
       {!showReplyForm && (
         <button 
           onClick={() => setShowReplyForm(true)}
-          className="fixed bottom-8 right-8 bg-blue-600 dark:bg-blue-500 text-white px-6 py-4 rounded-full font-medium hover:bg-blue-700 dark:hover:bg-blue-600 active:scale-95 transition-all flex items-center gap-2 shadow-2xl z-50"
+          className="fixed bottom-8 right-8 z-40 group flex items-center gap-2 bg-indigo-600 dark:bg-indigo-500 text-white pl-5 pr-6 py-4 rounded-full shadow-xl hover:shadow-2xl hover:bg-indigo-700 dark:hover:bg-indigo-600 hover:-translate-y-1 transition-all active:scale-95"
         >
           <MessageSquarePlus size={20} />
-          回复
+          <span className="font-bold tracking-wide">参与讨论</span>
         </button>
       )}
 
-      {showReplyForm && (
-        <>
-          <div 
-            className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40 transition-opacity duration-300"
-            onClick={() => setShowReplyForm(false)}
-          />
-          
-          <div className="fixed top-0 right-0 h-full w-full md:w-[35%] lg:w-[30%] bg-slate-50 dark:bg-slate-900 shadow-2xl z-50 transform transition-transform duration-300 ease-out flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex-shrink-0">
-              <div className="flex items-center gap-3">
-                <MessageSquarePlus size={22} className="text-blue-600 dark:text-blue-400" />
-                <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200">添加回复</h2>
-              </div>
-              <button 
-                onClick={() => setShowReplyForm(false)}
-                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                title="关闭"
-              >
-                <X size={20} />
-              </button>
+      {/* 侧边抽屉：回复表单 */}
+      {/* 遮罩层 */}
+      <div 
+        className={`fixed inset-0 bg-slate-900/20 dark:bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${showReplyForm ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        onClick={() => setShowReplyForm(false)}
+      />
+      
+      {/* 抽屉内容 */}
+      <div className={`fixed top-0 right-0 h-full w-full md:w-[500px] bg-white dark:bg-slate-950 shadow-2xl z-50 transform transition-transform duration-300 ease-out flex flex-col ${showReplyForm ? 'translate-x-0' : 'translate-x-full'}`}>
+        
+        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-800 bg-white/50 dark:bg-slate-950/50 backdrop-blur-md">
+            <div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">添加回复</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">分享你的见解，保持友善交流</p>
             </div>
+            <button 
+                onClick={() => setShowReplyForm(false)}
+                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+            >
+                <X size={24} />
+            </button>
+        </div>
 
-            <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900">
-              <form onSubmit={handleReply} className="p-6 space-y-5">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                    你的昵称
-                  </label>
-                  <input 
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 dark:bg-slate-950">
+          <form className="space-y-6">
+            <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                    <User size={14} /> 昵称
+                </label>
+                <input 
                     type="text" 
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 outline-none transition-all text-slate-800 dark:text-slate-200"
-                    placeholder="输入你的昵称"
+                    className="block w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:border-indigo-500 outline-none transition-all text-slate-800 dark:text-slate-200 placeholder:text-slate-400 shadow-sm"
+                    placeholder="如何称呼你？"
                     value={username}
                     onChange={e => setUsername(e.target.value)}
-                    required
-                  />
-                </div>
+                />
+            </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                    回复内容
-                  </label>
-                  <div className="bg-white dark:bg-slate-800 [&_.ql-toolbar]:border-slate-200 dark:[&_.ql-toolbar]:border-slate-700 [&_.ql-toolbar]:bg-slate-50 dark:[&_.ql-toolbar]:bg-slate-900 [&_.ql-toolbar]:rounded-t-lg [&_.ql-container]:border-slate-200 dark:[&_.ql-container]:border-slate-700 [&_.ql-container]:rounded-b-lg [&_.ql-container]:min-h-[300px] [&_.ql-editor]:text-base dark:[&_.ql-editor]:text-slate-200 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+            <div className="space-y-2 flex-1 flex flex-col">
+                <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                    <Bot size={14} /> 内容
+                </label>
+                <div className="
+                    bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all shadow-sm
+                    [&_.ql-toolbar]:bg-slate-50 dark:[&_.ql-toolbar]:bg-slate-900/50 [&_.ql-toolbar]:border-0 [&_.ql-toolbar]:border-b [&_.ql-toolbar]:border-slate-200 dark:[&_.ql-toolbar]:border-slate-800 
+                    [&_.ql-container]:border-none [&_.ql-container]:font-sans
+                    [&_.ql-editor]:min-h-[250px] [&_.ql-editor]:text-base [&_.ql-editor]:text-slate-700 dark:[&_.ql-editor]:text-slate-300 [&_.ql-editor]:leading-relaxed
+                    dark:[&_.ql-stroke]:stroke-slate-400 dark:[&_.ql-fill]:fill-slate-400 dark:[&_.ql-picker]:text-slate-400
+                ">
                     <ReactQuill 
                       theme="snow" 
                       value={replyContent} 
@@ -288,35 +343,28 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
                       modules={modules}
                       placeholder="写下你的看法..."
                     />
-                  </div>
                 </div>
-              </form>
             </div>
+          </form>
+        </div>
 
-            <div className="px-6 py-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3 flex-shrink-0">
-              <button 
-                type="button"
-                onClick={() => {
-                  setShowReplyForm(false);
-                  setReplyContent('');
-                  setUsername('');
-                }}
-                className="px-5 py-2.5 rounded-lg font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
-              >
+        <div className="px-6 py-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 flex items-center justify-end gap-3">
+            <button 
+                onClick={() => setShowReplyForm(false)}
+                className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
                 取消
-              </button>
-              <button 
+            </button>
+            <button 
                 onClick={handleReply}
                 disabled={isSending}
-                className="bg-blue-600 dark:bg-blue-500 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-700 dark:hover:bg-blue-600 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-              >
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-medium shadow-lg shadow-indigo-500/20 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
                 {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                 发送回复
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+            </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -4,8 +4,9 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import check_password
+from django.db.models import Count
 from .models import Thread, HumanUser, AIAgent, Post
-from .serializers import ThreadSerializer
+from .serializers import ThreadSerializer, ThreadListSerializer
 import random
 import time
 import re
@@ -74,8 +75,8 @@ def trigger_ai_reply_task(thread_id):
 
 @api_view(['GET'])
 def api_get_threads(request):
-    threads = Thread.objects.select_related('author').prefetch_related('posts').order_by('-created_at')
-    serializer = ThreadSerializer(threads, many=True)
+    threads = Thread.objects.select_related('author').annotate(post_count=Count('posts')).order_by('-created_at')
+    serializer = ThreadListSerializer(threads, many=True)
     return Response(serializer.data)
 
 @api_view(['GET'])

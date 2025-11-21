@@ -7,11 +7,13 @@ import Link from 'next/link';
 interface Thread {
   id: number;
   title: string;
-  content: string;
+  content?: string; // 仅在详情页有
+  content_preview?: string; // 仅在列表页有
   author_name: string;
   author_avatar?: string;
   created_at: string;
-  posts: any[];
+  posts?: any[]; // 在列表页可能没有或不完整
+  reply_count?: number; // 列表页有
 }
 
 interface UserInfo {
@@ -151,23 +153,37 @@ export default function Home() {
             
             {/* 加载状态 (Skeleton) */}
             {isLoading && Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-5 animate-pulse">
+              <div key={i} className="grid grid-cols-1 md:grid-cols-12 gap-4 px-6 py-5">
                 <div className="col-span-6 space-y-3">
-                  <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
-                  <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-1/2"></div>
+                  <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded w-3/4 animate-shimmer"></div>
+                  <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded w-1/2 animate-shimmer"></div>
                 </div>
                 <div className="hidden md:block col-span-3">
                    <div className="flex items-center gap-2">
-                     <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700"></div>
-                     <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-20"></div>
+                     <div className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 animate-shimmer"></div>
+                     <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-20 animate-shimmer"></div>
                    </div>
                 </div>
               </div>
             ))}
 
             {/* 数据列表 */}
-            {!isLoading && threads.map((thread) => {
-              const replyCount = thread.posts ? thread.posts.length : 0;
+            {!isLoading && threads.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                    <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-4">
+                        <Search className="text-slate-400 w-8 h-8" />
+                    </div>
+                    <h3 className="text-lg font-medium text-slate-900 dark:text-white">暂时还没有内容</h3>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1 max-w-sm text-sm">
+                        看起来这里还是空的。为什么不成为第一个发起讨论的人呢？
+                    </p>
+                    <a href="/create" className="mt-6 text-indigo-600 hover:text-indigo-700 font-medium text-sm hover:underline">
+                        立即创建主题 &rarr;
+                    </a>
+                </div>
+            )}
+            {!isLoading && threads.length > 0 && threads.map((thread) => {
+              const replyCount = thread.reply_count ?? (thread.posts ? thread.posts.length : 0);
               
               return (
                 <div key={thread.id} className="group block hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors duration-200">
@@ -179,7 +195,7 @@ export default function Home() {
                         {thread.title ? thread.title.replace(/<[^>]+>/g, '') : '无标题'}
                       </h3>
                       <p className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1 font-normal">
-                        {thread.content.replace(/<[^>]+>/g, '').substring(0, 60) || "暂无预览内容..."}
+                        {thread.content_preview || "暂无预览内容..."}
                       </p>
                       
                       {/* 移动端显示的元数据 */}
@@ -231,22 +247,6 @@ export default function Home() {
                 </div>
               );
             })}
-
-            {/* 空状态 */}
-            {!isLoading && threads.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-                <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-full mb-4">
-                    <Search className="text-slate-400 w-8 h-8" />
-                </div>
-                <h3 className="text-lg font-medium text-slate-900 dark:text-white">暂时还没有内容</h3>
-                <p className="text-slate-500 dark:text-slate-400 mt-1 max-w-sm text-sm">
-                  看起来这里还是空的。为什么不成为第一个发起讨论的人呢？
-                </p>
-                <a href="/create" className="mt-6 text-indigo-600 hover:text-indigo-700 font-medium text-sm hover:underline">
-                    立即创建主题 &rarr;
-                </a>
-              </div>
-            )}
           </div>
         </div>
         

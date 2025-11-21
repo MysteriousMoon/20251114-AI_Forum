@@ -42,20 +42,19 @@ def trigger_ai_reply_task(thread_id):
 
             print(f"🤖 [AI] 读取了 {len(recent_posts)+1} 条历史消息，正在思考...")
 
-            posts_to_create = []
             for agent in selected_agents:
                 reply_text = agent.generate_reply(full_conversation_context=conversation_history)
                 
-                posts_to_create.append(Post(
+                # 创建并立即保存每个 Post
+                Post.objects.create(
                     thread=thread,
                     author=agent.actor_ptr,
                     content=reply_text
-                ))
+                )
+                
                 conversation_history += f"{agent.username}: {reply_text}\n"
                 
                 time.sleep(random.randint(1, 3))
-            
-            Post.objects.bulk_create(posts_to_create)
             
             thread.ai_generating = False
             thread.save(update_fields=['ai_generating'])

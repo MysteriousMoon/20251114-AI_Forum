@@ -1,12 +1,13 @@
 "use client";
-import { useState, FormEvent, useMemo, useEffect } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Send, Loader2, PenLine } from 'lucide-react';
 import dynamic from 'next/dynamic';
-
-const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
-import 'react-quill-new/dist/quill.snow.css';
+// MDEditor 需要浏览器环境，禁用 SSR
+const MDEditor = dynamic(() => import('@uiw/react-md-editor'), { ssr: false });
+import '@uiw/react-md-editor/markdown-editor.css';
+import '@uiw/react-markdown-preview/markdown.css';
 
 interface UserInfo {
   id: number;
@@ -22,7 +23,6 @@ export default function CreateThread() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // 检查登录状态
     const userStr = localStorage.getItem('user');
     const token = localStorage.getItem('access_token');
     
@@ -40,22 +40,13 @@ export default function CreateThread() {
     }
   }, [router]);
 
-  const modules = useMemo(() => ({
-    toolbar: [
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      ['blockquote', 'code-block'],
-      ['link'],
-      ['clean']
-    ],
-  }), []);
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
-    const cleanContent = content.replace(/<(.|\n)*?>/g, '').trim(); 
 
-    if (!title.trim() || !cleanContent) {
+    const trimmedTitle = title.trim();
+    const trimmedContent = content.trim();
+
+    if (!trimmedTitle || !trimmedContent) {
       alert("请填写完整内容");
       return;
     }
@@ -70,8 +61,8 @@ export default function CreateThread() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ 
-            title, 
-            content
+            title: trimmedTitle, 
+            content: trimmedContent
         }),
       });
 
@@ -79,7 +70,8 @@ export default function CreateThread() {
         const data = await res.json();
         router.push(`/thread/${data.thread_id}`);
       } else {
-        alert("发布失败");
+        const errorData = await res.json();
+        alert(errorData.error || "发布失败");
       }
     } catch (err) {
       console.error(err);
@@ -143,39 +135,38 @@ export default function CreateThread() {
             />
           </div>
 
-          {/* Quill 编辑器 */}
+          {/* Markdown 编辑器 */}
           <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
             <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-4">
               详细内容
             </label>
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
-            {/* Tailwind 样式覆写说明：
-                1. ql-toolbar: 模拟样式1的顶部灰色工具栏背景，去掉默认边框，只保留下划线。
-                2. ql-container: 去掉默认边框，调整字体。
-                3. ql-editor: 设置最小高度和内边距。
-            */}
-            <div className="
-                [&_.ql-toolbar]:bg-slate-50/50 dark:[&_.ql-toolbar]:bg-slate-800/30 
-                [&_.ql-toolbar]:border-0 [&_.ql-toolbar]:border-b [&_.ql-toolbar]:border-slate-100 dark:[&_.ql-toolbar]:border-slate-800 
-                [&_.ql-toolbar]:px-4 [&_.ql-toolbar]:py-3
-                
-                [&_.ql-container]:border-none [&_.ql-container]:text-base [&_.ql-container]:font-sans
-                
-                [&_.ql-editor]:min-h-[300px] [&_.ql-editor]:p-4 [&_.ql-editor]:text-slate-700 dark:[&_.ql-editor]:text-slate-300 
-                [&_.ql-editor]:placeholder:text-slate-400 [&_.ql-editor]:leading-relaxed
-                
-                /* 修复 Quill 图标在暗色模式下的颜色 */
-                dark:[&_.ql-stroke]:stroke-slate-400 dark:[&_.ql-fill]:fill-slate-400
-                dark:[&_.ql-picker]:text-slate-400
-            ">
-              <ReactQuill 
-                theme="snow" 
-                value={content} 
-                onChange={setContent} 
-                modules={modules}
-                placeholder="在这里尽情书写你的想法..."
-              />
-            </div>
+            <div className="rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="
+                [&_.w-md-editor]:border-0 [&_.w-md-editor]:shadow-none
+                [&_.w-md-editor-toolbar]:bg-slate-50/50 dark:[&_.w-md-editor-toolbar]:bg-slate-800/30
+                [&_.w-md-editor-toolbar]:border-0 [&_.w-md-editor-toolbar]:border-b [&_.w-md-editor-toolbar]:border-slate-200 dark:[&_.w-md-editor-toolbar]:border-slate-700
+                [&_.w-md-editor-content]:bg-white dark:[&_.w-md-editor-content]:bg-slate-900
+                [&_.w-md-editor-text]:min-h-[300px]
+                [&_.w-md-editor-text-pre]:text-slate-700 dark:[&_.w-md-editor-text-pre]:text-slate-300
+                [&_.w-md-editor-text-input]:text-slate-700 dark:[&_.w-md-editor-text-input]:text-slate-300
+                [&_.wmde-markdown]:text-slate-700 dark:[&_.wmde-markdown]:text-slate-300
+                [&_.w-md-editor-toolbar-divider]:bg-slate-200 dark:[&_.w-md-editor-toolbar-divider]:bg-slate-700
+                [&_.w-md-editor-toolbar_button]:!w-8 [&_.w-md-editor-toolbar_button]:!h-8
+                [&_.w-md-editor-toolbar_svg]:!w-4 [&_.w-md-editor-toolbar_svg]:!h-4
+                [&_button]:text-slate-600 dark:[&_button]:text-slate-400
+                [&_button:hover]:text-slate-900 dark:[&_button:hover]:text-slate-200
+                [&_button:hover]:bg-slate-100 dark:[&_button:hover]:bg-slate-800
+              " data-color-mode="light">
+                <MDEditor
+                  value={content}
+                  onChange={(val) => setContent(val || '')}
+                  preview="live"
+                  height={400}
+                  textareaProps={{
+                    placeholder: '在这里尽情书写你的想法...'
+                  }}
+                />
+              </div>
             </div>
           </div>
 

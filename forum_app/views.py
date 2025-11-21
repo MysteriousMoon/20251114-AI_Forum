@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth.hashers import check_password
 from .models import Thread, HumanUser, AIAgent, Post
 from .serializers import ThreadSerializer
 import random
@@ -21,17 +21,17 @@ def strip_html_tags(text):
 def trigger_ai_reply_task(thread_id):
     def generate_replies():
         try:
-            thread = Thread.objects.get(id=thread_id)
+            thread = Thread.objects.select_related('author').get(id=thread_id)
             
             all_agents = list(AIAgent.objects.all())
             if not all_agents:
                 thread.ai_generating = False
-                thread.save()
+                thread.save(update_fields=['ai_generating'])
                 return
 
             conversation_history = f"【楼主】{thread.author.username}: {thread.content}\n"
             
-            recent_posts = thread.posts.order_by('created_at')[:20]
+            recent_posts = thread.posts.select_related('author').order_by('created_at')[:20]
             
             for post in recent_posts:
                 conversation_history += f"{post.author.username}: {post.content}\n"
@@ -41,46 +41,49 @@ def trigger_ai_reply_task(thread_id):
 
             print(f"🤖 [AI] 读取了 {len(recent_posts)+1} 条历史消息，正在思考...")
 
+            posts_to_create = []
             for agent in selected_agents:
                 reply_text = agent.generate_reply(full_conversation_context=conversation_history)
                 
-                Post.objects.create(
+                posts_to_create.append(Post(
                     thread=thread,
                     author=agent.actor_ptr,
                     content=reply_text
-                )
+                ))
                 conversation_history += f"{agent.username}: {reply_text}\n"
                 
                 time.sleep(random.randint(1, 3))
             
+            Post.objects.bulk_create(posts_to_create)
+            
             thread.ai_generating = False
-            thread.save()
+            thread.save(update_fields=['ai_generating'])
             print("✅ AI回复生成完成")
 
+        except Thread.DoesNotExist:
+            print(f"💥 Thread {thread_id} 不存在")
         except Exception as e:
             print(f"💥 AI 任务出错: {e}")
             try:
-                thread = Thread.objects.get(id=thread_id)
-                thread.ai_generating = False
-                thread.save()
+                Thread.objects.filter(id=thread_id).update(ai_generating=False)
             except:
                 pass
     
-    # 在后台线程执行
-    thread = threading.Thread(target=generate_replies)
-    thread.daemon = True
+    thread = threading.Thread(target=generate_replies, daemon=True)
     thread.start()
 
 @api_view(['GET'])
 def api_get_threads(request):
-    threads = Thread.objects.all().order_by('-created_at')
+    threads = Thread.objects.select_related('author').prefetch_related('posts').order_by('-created_at')
     serializer = ThreadSerializer(threads, many=True)
     return Response(serializer.data)
 
 @api_view(['GET'])
 def api_get_single_thread(request, thread_id):
     try:
-        thread = Thread.objects.get(id=thread_id)
+        thread = Thread.objects.select_related('author').prefetch_related(
+            'posts__author'
+        ).get(id=thread_id)
         serializer = ThreadSerializer(thread)
         return Response(serializer.data)
     except Thread.DoesNotExist:
@@ -116,27 +119,23 @@ def api_create_thread(request):
 @permission_classes([IsAuthenticated])
 def api_reply_thread(request, thread_id):
     try:
-        thread = Thread.objects.get(id=thread_id)
+        thread = Thread.objects.only('id', 'ai_generating').get(id=thread_id)
     except Thread.DoesNotExist:
         return Response({"error": "帖子不存在"}, status=404)
 
-    data = request.data
-    content = data.get('content')
+    content = request.data.get('content')
     
-    if not content:
+    if not content or not content.strip():
         return Response({"error": "内容不能为空"}, status=400)
     
-    user = request.user
-
     Post.objects.create(
         thread=thread,
         content=content,
-        author=user.actor_ptr
+        author=request.user.actor_ptr
     )
 
-    # 先设置标志，再启动后台任务
     thread.ai_generating = True
-    thread.save()
+    thread.save(update_fields=['ai_generating'])
 
     print("🤖 开始生成AI回复（后台异步）...")
     trigger_ai_reply_task(thread.id)

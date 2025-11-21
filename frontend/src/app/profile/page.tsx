@@ -20,7 +20,6 @@ export default function Profile() {
   const [uploadSuccess, setUploadSuccess] = useState(false);
 
   useEffect(() => {
-    // 检查登录状态
     const userStr = localStorage.getItem('user');
     const token = localStorage.getItem('access_token');
     
@@ -33,9 +32,7 @@ export default function Profile() {
     try {
       const user = JSON.parse(userStr);
       setCurrentUser(user);
-      if (user.avatar) {
-        setPreviewUrl(user.avatar);
-      }
+      setPreviewUrl(user.avatar || '');
     } catch (e) {
       console.error('解析用户信息失败', e);
       router.push('/login');
@@ -92,16 +89,11 @@ export default function Profile() {
       if (response.ok) {
         setUploadSuccess(true);
         
-        // 更新本地存储的用户信息
-        if (currentUser) {
-          const updatedUser = { ...currentUser, avatar: data.avatar };
-          localStorage.setItem('user', JSON.stringify(updatedUser));
-          setCurrentUser(updatedUser);
-        }
+        const updatedUser = { ...currentUser!, avatar: data.avatar };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setCurrentUser(updatedUser);
 
-        setTimeout(() => {
-          setUploadSuccess(false);
-        }, 3000);
+        setTimeout(() => setUploadSuccess(false), 3000);
       } else {
         alert(data.error || '上传失败');
       }

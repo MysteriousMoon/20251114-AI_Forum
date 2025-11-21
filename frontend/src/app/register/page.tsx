@@ -17,17 +17,21 @@ export default function Register() {
     e.preventDefault();
     setError('');
     
-    if (!username.trim() || !email.trim() || !password.trim()) {
+    const trimmedUsername = username.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedUsername || !trimmedEmail || !trimmedPassword) {
       setError("请填写所有字段");
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (trimmedPassword !== confirmPassword.trim()) {
       setError("两次密码输入不一致");
       return;
     }
 
-    if (password.length < 6) {
+    if (trimmedPassword.length < 6) {
       setError("密码至少需要6个字符");
       return;
     }
@@ -37,17 +41,20 @@ export default function Register() {
       const res = await fetch('http://127.0.0.1:8000/api/register/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password }),
+        body: JSON.stringify({ 
+          username: trimmedUsername, 
+          email: trimmedEmail, 
+          password: trimmedPassword 
+        }),
       });
 
       const data = await res.json();
 
       if (res.ok) {
-        // 注册成功，自动登录
         const loginRes = await fetch('http://127.0.0.1:8000/api/login/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username: trimmedUsername, password: trimmedPassword }),
         });
 
         const loginData = await loginRes.json();
@@ -59,6 +66,9 @@ export default function Register() {
           
           router.push('/');
           router.refresh();
+        } else {
+          setError("注册成功但登录失败，请手动登录");
+          setTimeout(() => router.push('/login'), 2000);
         }
       } else {
         setError(data.error || "注册失败");

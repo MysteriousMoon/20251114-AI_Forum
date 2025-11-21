@@ -1,13 +1,16 @@
 "use client";
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Send, Bot, User, Loader2, MessageSquarePlus, X, Sparkles, Clock, Copy, Check } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { ArrowLeft, Send, Bot, User, Loader2, MessageSquarePlus, X, Sparkles, Clock } from 'lucide-react';
+import useSWR from 'swr';
 
 import dynamic from 'next/dynamic';
-const ReactQuill = dynamic(() => import('react-quill-new'), { ssr: false });
-import 'react-quill-new/dist/quill.snow.css';
+// MDEditor 仍需禁用 SSR（因为需要浏览器环境）
+const MDEditor = dynamic(() => import('@uiw/react-md-editor'), { ssr: false });
+// MarkdownPreview 启用 SSR，提升首屏加载速度
+import MarkdownPreview from '@uiw/react-markdown-preview';
+import '@uiw/react-md-editor/markdown-editor.css';
+import '@uiw/react-markdown-preview/markdown.css';
 
 // --- 类型定义 ---
 interface Post {
@@ -37,27 +40,22 @@ interface UserInfo {
   avatar?: string;
 }
 
+// SWR fetcher
+const fetcher = (url: string) => fetch(url).then(res => {
+  if (!res.ok) throw new Error('Failed to fetch');
+  return res.json();
+});
+
 export default function ThreadDetail({ params }: { params: Promise<{ id: string }> }) {
   const [threadId, setThreadId] = useState<string | null>(null);
-  const [thread, setThread] = useState<Thread | null>(null);
   const [currentUser, setCurrentUser] = useState<UserInfo | null>(null);
   const [replyContent, setReplyContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showReplyForm, setShowReplyForm] = useState(false);
 
-  // 工具栏配置
-  const modules = useMemo(() => ({
-    toolbar: [
-      ['bold', 'italic', 'code-block', 'link'],
-      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-      ['clean']
-    ],
-  }), []);
-
   useEffect(() => {
     params.then(p => setThreadId(p.id));
     
-    // 检查登录状态
     const userStr = localStorage.getItem('user');
     if (userStr) {
       try {
@@ -68,41 +66,32 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
     }
   }, [params]);
 
-  const fetchDetail = async () => {
-    if (!threadId) return;
-    try {
-      const res = await fetch(`http://127.0.0.1:8000/api/threads/${threadId}/`);
-      if (res.ok) {
-        const data = await res.json();
-        setThread(data);
-      }
-    } catch (err) {
-      console.error(err);
+  // 使用 SWR 进行数据获取和智能轮询
+  const { data: thread, error, mutate } = useSWR<Thread>(
+    threadId ? `http://127.0.0.1:8000/api/threads/${threadId}/` : null,
+    fetcher,
+    {
+      // 核心优化：只有当 ai_generating 为 true 时才开启轮询
+      refreshInterval: (data) => (data?.ai_generating ? 2000 : 0),
+      // 页面获得焦点时不自动重新验证（避免不必要的请求）
+      revalidateOnFocus: false,
+      // 重连时自动重新验证
+      revalidateOnReconnect: true,
+      // 保持之前的数据，避免闪烁
+      keepPreviousData: true,
     }
-  };
-
-  useEffect(() => {
-    if (!threadId) return;
-    fetchDetail();
-  }, [threadId]);
-  
-  // 智能轮询
-  useEffect(() => {
-    if (!thread || !thread.ai_generating) return;
-    const pollInterval = setInterval(() => { fetchDetail(); }, 2000);
-    return () => clearInterval(pollInterval);
-  }, [thread?.ai_generating, threadId]);
+  );
 
   const handleReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanContent = replyContent.replace(/<(.|\n)*?>/g, '').trim(); 
     
     if (!currentUser) {
       alert("请先登录");
       return;
     }
     
-    if (!cleanContent || !threadId) {
+    const trimmedContent = replyContent.trim();
+    if (!trimmedContent || !threadId) {
       alert("请输入内容");
       return;
     }
@@ -116,17 +105,17 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ content: replyContent }),
+        body: JSON.stringify({ content: trimmedContent }),
       });
 
       if (res.ok) {
         setReplyContent('');
         setShowReplyForm(false);
-        await fetchDetail();
-        setTimeout(() => {
-            const element = document.getElementById('posts-end');
-            element?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
+        
+        // 使用 SWR 的 mutate 立即刷新数据，无需手动 fetch
+        await mutate();
+        
+        setTimeout(() => document.getElementById('posts-end')?.scrollIntoView({ behavior: 'smooth' }), 100);
       } else {
         alert("回复失败");
       }
@@ -138,7 +127,31 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
     }
   };
 
-  if (!thread) return <div className="min-h-screen flex items-center justify-center text-slate-400"><Loader2 className="animate-spin" /></div>;
+  // 加载状态
+  if (!thread && !error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-400">
+        <Loader2 className="animate-spin" size={32} />
+      </div>
+    );
+  }
+
+  // 错误状态
+  if (error || !thread) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-500 mb-4">加载失败</p>
+          <button 
+            onClick={() => mutate()} 
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans relative selection:bg-indigo-100 dark:selection:bg-indigo-900/50">
@@ -192,10 +205,9 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
             </div>
           </div>
           
-          <div 
-            className="prose prose-slate dark:prose-invert prose-lg max-w-none text-slate-700 dark:text-slate-300 leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: thread.content }}
-          />
+          <div className="wmde-markdown-var prose prose-slate dark:prose-invert prose-lg max-w-none [&_.wmde-markdown]:!bg-transparent">
+            <MarkdownPreview source={thread.content} />
+          </div>
         </div>
 
         {/* 回复列表 */}
@@ -272,24 +284,24 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
                 <div className="relative z-10 pl-0 md:pl-14">
                     {post.is_ai ? (
                     <div className="
-                        prose prose-slate dark:prose-invert max-w-none 
-                        prose-p:leading-relaxed prose-p:text-slate-700 dark:prose-p:text-slate-300
-                        prose-headings:text-emerald-950 dark:prose-headings:text-emerald-200 prose-headings:font-bold
-                        prose-a:text-emerald-600 dark:prose-a:text-emerald-400 prose-a:no-underline hover:prose-a:underline
-                        prose-strong:text-emerald-900 dark:prose-strong:text-emerald-300
-                        prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:text-emerald-700 dark:prose-code:text-emerald-300 prose-code:font-medium prose-code:before:content-[''] prose-code:after:content-['']
-                        prose-pre:bg-slate-900 dark:prose-pre:bg-black/40 prose-pre:border prose-pre:border-slate-800 dark:prose-pre:border-emerald-900/30 prose-pre:shadow-lg prose-pre:rounded-xl
-                        prose-ul:marker:text-emerald-400
+                        wmde-markdown-var prose prose-slate dark:prose-invert max-w-none 
+                        [&_.wmde-markdown]:!bg-transparent
+                        [&_*]:text-emerald-950 dark:[&_*]:text-emerald-200
+                        [&_h1]:text-emerald-950 dark:[&_h1]:text-emerald-200 [&_h1]:font-bold
+                        [&_h2]:text-emerald-950 dark:[&_h2]:text-emerald-200 [&_h2]:font-bold
+                        [&_h3]:text-emerald-950 dark:[&_h3]:text-emerald-200 [&_h3]:font-bold
+                        [&_a]:text-emerald-600 dark:[&_a]:text-emerald-400 [&_a]:no-underline hover:[&_a]:underline
+                        [&_strong]:text-emerald-900 dark:[&_strong]:text-emerald-300
+                        [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:bg-slate-100 dark:[&_code]:bg-slate-800 [&_code]:text-emerald-700 dark:[&_code]:text-emerald-300
+                        [&_pre]:bg-slate-900 dark:[&_pre]:bg-black/40 [&_pre]:border [&_pre]:border-slate-800 dark:[&_pre]:border-emerald-900/30 [&_pre]:shadow-lg [&_pre]:rounded-xl
+                        [&_ul]:marker:text-emerald-400
                     ">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {post.content.replace(/<[^>]+>/g, '')}
-                        </ReactMarkdown>
+                        <MarkdownPreview source={post.content} />
                     </div>
                     ) : (
-                    <div 
-                        className="prose prose-slate dark:prose-invert max-w-none text-slate-700 dark:text-slate-300"
-                        dangerouslySetInnerHTML={{ __html: post.content }}
-                    />
+                    <div className="wmde-markdown-var prose prose-slate dark:prose-invert max-w-none [&_.wmde-markdown]:!bg-transparent">
+                        <MarkdownPreview source={post.content} />
+                    </div>
                     )}
                 </div>
               </div>
@@ -373,20 +385,33 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
                 <label className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
                     <Bot size={14} /> 内容
                 </label>
-                <div className="
-                    bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all shadow-sm
-                    [&_.ql-toolbar]:bg-slate-50 dark:[&_.ql-toolbar]:bg-slate-900/50 [&_.ql-toolbar]:border-0 [&_.ql-toolbar]:border-b [&_.ql-toolbar]:border-slate-200 dark:[&_.ql-toolbar]:border-slate-800 
-                    [&_.ql-container]:border-none [&_.ql-container]:font-sans
-                    [&_.ql-editor]:min-h-[250px] [&_.ql-editor]:text-base [&_.ql-editor]:text-slate-700 dark:[&_.ql-editor]:text-slate-300 [&_.ql-editor]:leading-relaxed
-                    dark:[&_.ql-stroke]:stroke-slate-400 dark:[&_.ql-fill]:fill-slate-400 dark:[&_.ql-picker]:text-slate-400
-                ">
-                    <ReactQuill 
-                      theme="snow" 
-                      value={replyContent} 
-                      onChange={setReplyContent} 
-                      modules={modules}
-                      placeholder="写下你的看法..."
+                <div className="rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+                  <div className="
+                    [&_.w-md-editor]:border-0 [&_.w-md-editor]:shadow-none
+                    [&_.w-md-editor-toolbar]:bg-slate-50/50 dark:[&_.w-md-editor-toolbar]:bg-slate-800/30
+                    [&_.w-md-editor-toolbar]:border-0 [&_.w-md-editor-toolbar]:border-b [&_.w-md-editor-toolbar]:border-slate-200 dark:[&_.w-md-editor-toolbar]:border-slate-700
+                    [&_.w-md-editor-content]:bg-white dark:[&_.w-md-editor-content]:bg-slate-900
+                    [&_.w-md-editor-text]:min-h-[250px]
+                    [&_.w-md-editor-text-pre]:text-slate-700 dark:[&_.w-md-editor-text-pre]:text-slate-300
+                    [&_.w-md-editor-text-input]:text-slate-700 dark:[&_.w-md-editor-text-input]:text-slate-300
+                    [&_.wmde-markdown]:text-slate-700 dark:[&_.wmde-markdown]:text-slate-300
+                    [&_.w-md-editor-toolbar-divider]:bg-slate-200 dark:[&_.w-md-editor-toolbar-divider]:bg-slate-700
+                    [&_.w-md-editor-toolbar_button]:!w-8 [&_.w-md-editor-toolbar_button]:!h-8
+                    [&_.w-md-editor-toolbar_svg]:!w-4 [&_.w-md-editor-toolbar_svg]:!h-4
+                    [&_button]:text-slate-600 dark:[&_button]:text-slate-400
+                    [&_button:hover]:text-slate-900 dark:[&_button:hover]:text-slate-200
+                    [&_button:hover]:bg-slate-100 dark:[&_button:hover]:bg-slate-800
+                  " data-color-mode="light">
+                    <MDEditor
+                      value={replyContent}
+                      onChange={(val) => setReplyContent(val || '')}
+                      preview="live"
+                      height={350}
+                      textareaProps={{
+                        placeholder: '写下你的看法...'
+                      }}
                     />
+                  </div>
                 </div>
             </div>
           </form>

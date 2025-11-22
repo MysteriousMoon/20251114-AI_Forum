@@ -21,6 +21,7 @@ export default function CreateThread() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [colorMode, setColorMode] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
@@ -38,6 +39,13 @@ export default function CreateThread() {
       console.error('解析用户信息失败', e);
       router.push('/login');
     }
+
+    // 监听系统颜色模式
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => setColorMode(mediaQuery.matches ? 'dark' : 'light');
+    handleChange(); // 初始设置
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, [router]);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -128,7 +136,7 @@ export default function CreateThread() {
             <input
                 type="text"
                 placeholder="输入主题标题..."
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-base focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 outline-none transition-all font-medium text-slate-900 dark:text-slate-100"
+                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-base focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 outline-none transition-all font-medium text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
@@ -156,7 +164,7 @@ export default function CreateThread() {
                 [&_button]:text-slate-600 dark:[&_button]:text-slate-400
                 [&_button:hover]:text-slate-900 dark:[&_button:hover]:text-slate-200
                 [&_button:hover]:bg-slate-100 dark:[&_button:hover]:bg-slate-800
-              " data-color-mode="light">
+              " data-color-mode={colorMode}>
                 <MDEditor
                   value={content}
                   onChange={(val) => setContent(val || '')}

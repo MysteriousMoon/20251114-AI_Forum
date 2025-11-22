@@ -52,6 +52,7 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
   const [replyContent, setReplyContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showReplyForm, setShowReplyForm] = useState(false);
+  const [colorMode, setColorMode] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
     params.then(p => setThreadId(p.id));
@@ -64,6 +65,13 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
         console.error('解析用户信息失败', e);
       }
     }
+
+    // 监听系统颜色模式
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => setColorMode(mediaQuery.matches ? 'dark' : 'light');
+    handleChange(); // 初始设置
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, [params]);
 
   // 使用 SWR 进行数据获取和智能轮询
@@ -401,7 +409,7 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
                     [&_button]:text-slate-600 dark:[&_button]:text-slate-400
                     [&_button:hover]:text-slate-900 dark:[&_button:hover]:text-slate-200
                     [&_button:hover]:bg-slate-100 dark:[&_button:hover]:bg-slate-800
-                  " data-color-mode="light">
+                  " data-color-mode={colorMode}>
                     <MDEditor
                       value={replyContent}
                       onChange={(val) => setReplyContent(val || '')}

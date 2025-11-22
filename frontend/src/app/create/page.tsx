@@ -2,17 +2,26 @@
 import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Send, Loader2, PenLine } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, PenLine, User } from 'lucide-react';
 import dynamic from 'next/dynamic';
+
 // MDEditor 需要浏览器环境，禁用 SSR
 const MDEditor = dynamic(() => import('@uiw/react-md-editor'), { ssr: false });
 import '@uiw/react-md-editor/markdown-editor.css';
 import '@uiw/react-markdown-preview/markdown.css';
 
+// --- 头像辅助函数 ---
+const getAvatarSrc = (base64: string | undefined | null) => {
+    if (!base64) return null;
+    if (base64.startsWith('data:image')) return base64;
+    return `data:image/png;base64,${base64}`;
+};
+
 interface UserInfo {
   id: number;
   username: string;
   email: string;
+  avatar?: string;
 }
 
 export default function CreateThread() {
@@ -88,6 +97,8 @@ export default function CreateThread() {
       setIsSubmitting(false);
     }
   };
+  
+  const currentUserAvatarSrc = getAvatarSrc(currentUser?.avatar);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans py-8 sm:py-12 px-4 sm:px-6">
@@ -115,8 +126,12 @@ export default function CreateThread() {
         {currentUser && (
           <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400">
-                <PenLine size={20} />
+              <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center overflow-hidden">
+                {currentUserAvatarSrc ? (
+                    <img src={currentUserAvatarSrc} alt={currentUser.username} className="w-full h-full object-cover" />
+                ) : (
+                    <User size={20} className="text-slate-500" />
+                )}
               </div>
               <div>
                 <p className="text-sm text-slate-500 dark:text-slate-400">发帖身份</p>

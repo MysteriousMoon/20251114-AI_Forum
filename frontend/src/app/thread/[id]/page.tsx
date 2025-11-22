@@ -46,6 +46,15 @@ const fetcher = (url: string) => fetch(url).then(res => {
   return res.json();
 });
 
+// --- 头像辅助函数 ---
+const getAvatarSrc = (base64: string | undefined | null) => {
+    if (!base64) return null;
+    // 如果已经是 data URI, 直接返回
+    if (base64.startsWith('data:image')) return base64;
+    // 否则, 假定为纯 base64 字符串并添加前缀
+    return `data:image/png;base64,${base64}`;
+};
+
 // --- 样式常量 ---
 // 优化的 Markdown 内容样式类
 const MARKDOWN_CLASS = `
@@ -179,6 +188,9 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
       </div>
     );
   }
+  
+  const threadAuthorAvatarSrc = getAvatarSrc(thread.author_avatar);
+  const currentUserAvatarSrc = getAvatarSrc(currentUser?.avatar);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#020617] font-sans relative selection:bg-indigo-500/30">
@@ -234,8 +246,8 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
                         <div className="flex items-center gap-4">
                             <div className="relative group">
                                 <div className="absolute -inset-0.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full opacity-75 group-hover:opacity-100 transition blur-[2px]"></div>
-                                {thread.author_avatar ? (
-                                    <img src={thread.author_avatar} alt={thread.author_name} className="relative w-14 h-14 rounded-full object-cover border-2 border-white dark:border-slate-900" />
+                                {threadAuthorAvatarSrc ? (
+                                    <img src={threadAuthorAvatarSrc} alt={thread.author_name} className="relative w-14 h-14 rounded-full object-cover border-2 border-white dark:border-slate-900" />
                                 ) : (
                                     <div className="relative w-14 h-14 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-500 border-2 border-white dark:border-slate-900">
                                         <User size={28} />
@@ -285,7 +297,9 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
             {/* 垂直连接线 (Timeline line) */}
             <div className="absolute left-6 top-4 bottom-12 w-0.5 bg-slate-200 dark:bg-slate-800 hidden md:block -z-10"></div>
 
-            {thread.posts.map((post, index) => (
+            {thread.posts.map((post, index) => {
+              const postAuthorAvatarSrc = getAvatarSrc(post.author_avatar);
+              return (
               <div key={post.id} className={`
                 relative group
                 ${index !== 0 ? 'mt-8' : ''}
@@ -301,7 +315,10 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
                             : 'bg-white dark:bg-slate-800 border-white dark:border-slate-950 text-slate-500 ring-2 ring-slate-200 dark:ring-slate-700'
                         }
                     `}>
-                         {post.is_ai ? <Bot size={20} /> : (post.author_avatar ? <img src={post.author_avatar} className="w-full h-full rounded-full object-cover" /> : <User size={20} />)}
+                         {postAuthorAvatarSrc 
+                            ? <img src={postAuthorAvatarSrc} alt={post.author_name} className="w-full h-full rounded-full object-cover" /> 
+                            : (post.is_ai ? <Bot size={20} /> : <User size={20} />)
+                         }
                     </div>
                 </div>
 
@@ -323,8 +340,11 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
 
                     {/* 移动端头像 (内联显示) */}
                     <div className="flex md:hidden items-center gap-3 mb-4">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center border ${post.is_ai ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                             {post.is_ai ? <Bot size={16} /> : <User size={16} />}
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center border overflow-hidden ${post.is_ai ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                             {postAuthorAvatarSrc
+                                ? <img src={postAuthorAvatarSrc} alt={post.author_name} className="w-full h-full object-cover" />
+                                : (post.is_ai ? <Bot size={16} /> : <User size={16} />)
+                             }
                         </div>
                         <span className="font-bold text-sm">{post.author_name}</span>
                         {post.is_ai && <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded">AI</span>}
@@ -358,7 +378,7 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
                    <div className="block md:hidden absolute left-1/2 -bottom-4 w-px h-8 bg-slate-200 dark:bg-slate-800 -z-10"></div>
                 )}
               </div>
-            ))}
+            )})}
             
             {/* AI Generating Skeleton */}
             {thread.ai_generating && (
@@ -424,10 +444,14 @@ export default function ThreadDetail({ params }: { params: Promise<{ id: string 
         <div className="flex-1 overflow-y-auto p-8 bg-slate-50/50 dark:bg-slate-950/50">
           {currentUser ? (
             <div className="flex items-center gap-4 mb-6 p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 p-0.5">
-                    <div className="w-full h-full rounded-full bg-white dark:bg-slate-900 flex items-center justify-center">
-                        <User size={20} className="text-indigo-600" />
-                    </div>
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 p-0.5 overflow-hidden">
+                    {currentUserAvatarSrc ? (
+                        <img src={currentUserAvatarSrc} alt={currentUser.username} className="w-full h-full rounded-full object-cover" />
+                    ) : (
+                        <div className="w-full h-full rounded-full bg-white dark:bg-slate-900 flex items-center justify-center">
+                            <User size={20} className="text-indigo-600" />
+                        </div>
+                    )}
                 </div>
                 <div>
                     <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">Current User</div>
